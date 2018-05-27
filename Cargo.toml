@@ -1,0 +1,8 @@
+[package]
+name = "winproc"
+version = "0.1.0"
+authors = ["Sam Green <sam.green81@gmail.com>"]
+
+[dependencies]
+failure = "0.1.1"
+winapi = { version = "0.3", features = ["handleapi", "tlhelp32", "realtimeapiset", "winbase"] }
