@@ -2,6 +2,14 @@
 name = "winproc"
 version = "0.1.0"
 authors = ["Sam Green <sam.green81@gmail.com>"]
+description = "Small wrapper over some process-related Windows APIs."
+readme = "README.md"
+license = "MIT"
+repository = "https://gitlab.com/samgreen/winproc-rs"
+keywords = ["windows"]
+
+[badges]
+gitlab = { repository = "samgreen/winproc-rs" }
 
 [dependencies]
 failure = "0.1.1"

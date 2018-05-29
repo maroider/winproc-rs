@@ -13,11 +13,14 @@ use winapi::{
 use Error;
 use WinResult;
 
+/// An owning wrapper over a Windows handle.
+///
+/// Will close the inner handle on `drop`.
 #[derive(Debug)]
 pub struct Handle(winnt::HANDLE);
 
 impl Handle {
-    /// Takes ownership of the handle.
+    /// Takes ownership of a raw handle.
     pub unsafe fn new(handle: winnt::HANDLE) -> Handle {
         Handle(handle)
     }
@@ -29,7 +32,7 @@ impl Handle {
     //        }
     //    }
 
-    /// Duplicates the handle without taking ownership.
+    /// Duplicates a handle without taking ownership.
     pub unsafe fn duplicate_from(handle: winnt::HANDLE) -> WinResult<Handle> {
         let mut new_handle = null_mut();
         let res = wh::DuplicateHandle(
@@ -42,7 +45,7 @@ impl Handle {
             winnt::DUPLICATE_SAME_ACCESS,
         );
         match res {
-            0 => Err(Error::last()),
+            0 => Err(Error::last_os_error()),
             _ => Ok(Handle(new_handle)),
         }
     }

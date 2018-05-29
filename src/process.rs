@@ -48,6 +48,9 @@ use Error;
 use Handle;
 use WinResult;
 
+/// A handle to a running process.
+///
+/// The process handle is opened with all access permissions. This may be changed in the future.
 #[derive(Debug)]
 pub struct Process {
     handle: Handle,
@@ -59,7 +62,7 @@ impl Process {
         unsafe {
             let handle = OpenProcess(PROCESS_ALL_ACCESS, 0, id);
             if handle.is_null() {
-                Err(Error::last())
+                Err(Error::last_os_error())
             } else {
                 Ok(Process {
                     handle: Handle::new(handle),
@@ -95,7 +98,7 @@ impl Process {
         unsafe {
             let snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
             if snap == INVALID_HANDLE_VALUE {
-                Err(Error::last())
+                Err(Error::last_os_error())
             } else {
                 Ok(ProcessIter {
                     snapshot: Handle::new(snap),
@@ -130,7 +133,7 @@ impl Process {
                 &mut size,
             );
             if ret == 0 {
-                Err(Error::last())
+                Err(Error::last_os_error())
             } else {
                 Ok(OsString::from_wide(&buffer[0..size as usize]).into())
             }
@@ -158,7 +161,7 @@ impl Process {
                 &mut system_mask,
             );
             if ret == 0 {
-                Err(Error::last())
+                Err(Error::last_os_error())
             } else {
                 Ok(process_mask as usize)
             }
@@ -170,7 +173,7 @@ impl Process {
         unsafe {
             let snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
             if snap == INVALID_HANDLE_VALUE {
-                Err(Error::last())
+                Err(Error::last_os_error())
             } else {
                 Ok(ThreadIter {
                     process: &self,
@@ -185,7 +188,7 @@ impl Process {
         unsafe {
             let snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
             if snap == INVALID_HANDLE_VALUE {
-                Err(Error::last())
+                Err(Error::last_os_error())
             } else {
                 Ok(ThreadIdIter {
                     process: &self,
@@ -200,7 +203,7 @@ impl Process {
         unsafe {
             let snap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, 0);
             if snap == INVALID_HANDLE_VALUE {
-                Err(Error::last())
+                Err(Error::last_os_error())
             } else {
                 Ok(ModuleEntryIter {
                     process: &self,
@@ -262,6 +265,7 @@ impl Iterator for ProcessIter {
     }
 }
 
+/// A handle to a running thread.
 #[derive(Debug)]
 pub struct Thread {
     handle: Handle,
@@ -273,7 +277,7 @@ impl Thread {
         unsafe {
             let handle = OpenThread(THREAD_ALL_ACCESS, 0, id);
             if handle.is_null() {
-                Err(Error::last())
+                Err(Error::last_os_error())
             } else {
                 Ok(Thread {
                     handle: Handle::new(handle),
@@ -297,7 +301,7 @@ impl Thread {
             let mut cycles: ULONG64 = 0;
             let ret = QueryThreadCycleTime(self.handle.as_raw_handle(), &mut cycles);
             if ret == 0 {
-                Err(Error::last())
+                Err(Error::last_os_error())
             } else {
                 Ok(cycles as u64)
             }
@@ -310,7 +314,7 @@ impl Thread {
             let mut ideal: PROCESSOR_NUMBER = mem::zeroed();
             let ret = GetThreadIdealProcessorEx(self.handle.as_raw_handle(), &mut ideal);
             if ret == 0 {
-                Err(Error::last())
+                Err(Error::last_os_error())
             } else {
                 Ok(ideal.Number as u32)
             }
@@ -323,7 +327,7 @@ impl Thread {
         unsafe {
             let ret = SetThreadIdealProcessor(self.handle.as_raw_handle(), processor as DWORD);
             if ret == DWORD::max_value() {
-                Err(Error::last())
+                Err(Error::last_os_error())
             } else {
                 Ok(ret)
             }
@@ -335,11 +339,11 @@ impl Thread {
         unsafe {
             let ret = SetThreadAffinityMask(self.handle.as_raw_handle(), DWORD_PTR::max_value());
             if ret == 0 {
-                Err(Error::last())
+                Err(Error::last_os_error())
             } else {
                 let ret = SetThreadAffinityMask(self.handle.as_raw_handle(), ret);
                 if ret == 0 {
-                    Err(Error::last())
+                    Err(Error::last_os_error())
                 } else {
                     Ok(ret)
                 }
@@ -365,7 +369,7 @@ impl Thread {
         unsafe {
             let ret = SetThreadAffinityMask(self.handle.as_raw_handle(), mask as DWORD_PTR);
             if ret == 0 {
-                Err(Error::last())
+                Err(Error::last_os_error())
             } else {
                 Ok(ret)
             }
@@ -468,6 +472,11 @@ impl<'a> Iterator for ThreadIdIter<'a> {
     }
 }
 
+/// Holds data related to a module (dll) of a running process.
+///
+/// Maps almost directly to a Windows [MODULEENTRY32W][MODULEENTRY32W].
+///
+/// [MODULEENTRY32W]: https://msdn.microsoft.com/en-us/library/windows/desktop/ms684225(v=vs.85).aspx
 #[derive(Debug)]
 pub struct ModuleEntry {
     pub id: u32,
@@ -536,40 +545,40 @@ impl<'a> Iterator for ModuleEntryIter<'a> {
     }
 }
 
-mod tests {
-    #[allow(unused_imports)]
-    use super::*;
-
-    #[test]
-    fn enumerates_processes() {
-        let procs: Vec<_> = Process::all().unwrap().collect();
-        assert_eq!(procs.is_empty(), false);
-        println!("{:?}", procs);
-    }
-
-    #[test]
-    fn accesses_process_names() {
-        let names: Vec<_> = Process::all()
-            .unwrap()
-            .filter_map(|p| p.name().ok())
-            .collect();
-        assert_eq!(names.is_empty(), false);
-        println!("{:?}", names);
-    }
-
-    #[test]
-    fn enumerates_threads() {
-        let process = Process::all().unwrap().next().unwrap();
-        let threads: Vec<_> = process.threads().unwrap().collect();
-        assert_eq!(threads.is_empty(), false);
-        println!("{:?}", threads);
-    }
-
-    #[test]
-    fn enumerates_module_entries() {
-        let process = Process::all().unwrap().next().unwrap();
-        let entries: Vec<_> = process.module_entries().unwrap().collect();
-        assert_eq!(entries.is_empty(), false);
-        println!("{:?}", entries);
-    }
-}
+//mod tests {
+//    #[allow(unused_imports)]
+//    use super::*;
+//
+//    #[test]
+//    fn enumerates_processes() {
+//        let procs: Vec<_> = Process::all().unwrap().collect();
+//        assert_eq!(procs.is_empty(), false);
+//        println!("{:?}", procs);
+//    }
+//
+//    #[test]
+//    fn accesses_process_names() {
+//        let names: Vec<_> = Process::all()
+//            .unwrap()
+//            .filter_map(|p| p.name().ok())
+//            .collect();
+//        assert_eq!(names.is_empty(), false);
+//        println!("{:?}", names);
+//    }
+//
+//    #[test]
+//    fn enumerates_threads() {
+//        let process = Process::all().unwrap().next().unwrap();
+//        let threads: Vec<_> = process.threads().unwrap().collect();
+//        assert_eq!(threads.is_empty(), false);
+//        println!("{:?}", threads);
+//    }
+//
+//    #[test]
+//    fn enumerates_module_entries() {
+//        let process = Process::all().unwrap().next().unwrap();
+//        let entries: Vec<_> = process.module_entries().unwrap().collect();
+//        assert_eq!(entries.is_empty(), false);
+//        println!("{:?}", entries);
+//    }
+//}

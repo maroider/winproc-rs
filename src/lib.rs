@@ -1,3 +1,5 @@
+//! Small wrapper over some process-related Windows APIs.
+
 extern crate winapi;
 #[macro_use]
 extern crate failure;
