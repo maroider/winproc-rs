@@ -2,6 +2,8 @@
 
 #![cfg(windows)]
 
+#[macro_use]
+extern crate bitflags;
 extern crate winapi;
 #[macro_use]
 extern crate failure;
@@ -13,5 +15,5 @@ mod process;
 pub use self::{
     errors::{Error, WinResult},
     handle::Handle,
-    process::{ModuleEntry, Process, Thread},
+    process::{Access, Module, ModuleEntry, ModuleInfo, Process, Thread},
 };

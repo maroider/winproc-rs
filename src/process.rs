@@ -6,10 +6,11 @@ use std::{
         io::{AsRawHandle, FromRawHandle, IntoRawHandle},
         prelude::*,
     },
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 
 use winapi::{
+    ctypes::c_void,
     shared::{
         basetsd::{ULONG64, DWORD_PTR},
         minwindef::{DWORD, HMODULE, MAX_PATH},
@@ -26,6 +27,14 @@ use winapi::{
             OpenThread,
             SetThreadIdealProcessor,
         },
+        psapi::{
+            EnumProcessModulesEx,
+            GetModuleBaseNameW,
+            GetModuleFileNameExW,
+            GetModuleInformation,
+            LIST_MODULES_ALL,
+            MODULEINFO,
+        },
         realtimeapiset::QueryThreadCycleTime,
         tlhelp32::{
             CreateToolhelp32Snapshot,
@@ -34,6 +43,7 @@ use winapi::{
             PROCESSENTRY32,
             Process32Next,
             TH32CS_SNAPMODULE,
+            TH32CS_SNAPMODULE32,
             TH32CS_SNAPPROCESS,
             TH32CS_SNAPTHREAD,
             THREADENTRY32,
@@ -49,18 +59,30 @@ use Handle;
 use WinResult;
 
 /// A handle to a running process.
-///
-/// The process handle is opened with all access permissions. This may be changed in the future.
 #[derive(Debug)]
 pub struct Process {
     handle: Handle,
 }
 
 impl Process {
-    /// Creates a process handle from a PID.
+    /// Creates a process handle from a PID. Requests all access permissions.
     pub fn from_id(id: u32) -> WinResult<Process> {
         unsafe {
             let handle = OpenProcess(PROCESS_ALL_ACCESS, 0, id);
+            if handle.is_null() {
+                Err(Error::last_os_error())
+            } else {
+                Ok(Process {
+                    handle: Handle::new(handle),
+                })
+            }
+        }
+    }
+
+    /// Creates a process handle from a PID. Requests the specified access permissions.
+    pub fn from_id_with_access(id: u32, access: Access) -> WinResult<Process> {
+        unsafe {
+            let handle = OpenProcess(access.bits, 0, id);
             if handle.is_null() {
                 Err(Error::last_os_error())
             } else {
@@ -198,10 +220,56 @@ impl Process {
         }
     }
 
+    /// Returns a list of the modules of the process.
+    pub fn module_list<'a>(&'a self) -> WinResult<Vec<Module<'a>>> {
+        unsafe {
+            let mut mod_handles = Vec::new();
+            let mut last_needed = 0;
+            let mut needed = 0;
+
+            fn enum_mods(
+                process: &Process,
+                mod_handles: &mut [HMODULE],
+                needed: &mut u32,
+            ) -> WinResult<()> {
+                let res = unsafe {
+                    EnumProcessModulesEx(
+                        process.as_raw_handle(),
+                        mod_handles.as_mut_ptr(),
+                        mem::size_of_val(&mod_handles[..]) as _,
+                        needed,
+                        LIST_MODULES_ALL,
+                    )
+                };
+                if res == 0 {
+                    Err(Error::last_os_error())
+                } else {
+                    Ok(())
+                }
+            }
+
+            enum_mods(self, &mut mod_handles, &mut needed)?;
+            while needed > last_needed {
+                last_needed = needed;
+                mod_handles.resize(needed as usize, mem::zeroed());
+                enum_mods(self, &mut mod_handles, &mut needed)?;
+            }
+
+            let modules = mod_handles[..needed as usize / mem::size_of::<HMODULE>()]
+                .iter()
+                .map(|&handle| Module {
+                    handle,
+                    process: self,
+                })
+                .collect();
+            Ok(modules)
+        }
+    }
+
     /// Returns an iterator over the modules of the process.
     pub fn module_entries<'a>(&'a self) -> WinResult<impl Iterator<Item = ModuleEntry> + 'a> {
         unsafe {
-            let snap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, 0);
+            let snap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, 0);
             if snap == INVALID_HANDLE_VALUE {
                 Err(Error::last_os_error())
             } else {
@@ -262,6 +330,67 @@ impl Iterator for ProcessIter {
                 Some(Process::from_id(entry.th32ProcessID))
             }
         }
+    }
+}
+
+bitflags! {
+    /// Windows process-related access permission flags.
+    pub struct Access: u32 {
+        /// Required to delete the object.
+        const DELETE = winnt::DELETE;
+        /// Required to read information in the security descriptor for the object, not including
+        /// the information in the SACL. To read or write the SACL, you must request the
+        /// `ACCESS_SYSTEM_SECURITY` access right. For more information, see [SACL Access Right](https://msdn.microsoft.com/en-us/library/windows/desktop/aa379321\(v=vs.85\).aspx).
+        const READ_CONTROL = winnt::READ_CONTROL;
+        /// Required to modify the DACL in the security descriptor for the object.
+        const WRITE_DAC = winnt::WRITE_DAC;
+        /// Required to change the owner in the security descriptor for the object.
+        const WRITE_OWNER = winnt::WRITE_OWNER;
+        /// The right to use the object for synchronization.
+        /// This enables a thread to wait until the object is in the signaled state.
+        const SYNCHRONIZE = winnt::SYNCHRONIZE;
+        /// Union of `DELETE | READ_CONTROL | WRITE_DAC | WRITE_OWNER`.
+        const STANDARD_RIGHTS_REQUIRED = winnt::STANDARD_RIGHTS_REQUIRED;
+        /// Required to terminate a process.
+        const PROCESS_TERMINATE = winnt::PROCESS_TERMINATE;
+        ///	Required to create a thread.
+        const PROCESS_CREATE_THREAD = winnt::PROCESS_CREATE_THREAD;
+        const PROCESS_SET_SESSIONID = winnt::PROCESS_SET_SESSIONID;
+        /// Required to perform an operation on the address space of a process.
+        const PROCESS_VM_OPERATION = winnt::PROCESS_VM_OPERATION;
+        /// Required to read memory in a process.
+        const PROCESS_VM_READ = winnt::PROCESS_VM_READ;
+        /// Required to write to memory in a process.
+        const PROCESS_VM_WRITE = winnt::PROCESS_VM_WRITE;
+        /// Required to duplicate a handle.
+        const PROCESS_DUP_HANDLE = winnt::PROCESS_DUP_HANDLE;
+        /// Required to create a process.
+        const PROCESS_CREATE_PROCESS = winnt::PROCESS_CREATE_PROCESS;
+        /// Required to set memory limits.
+        const PROCESS_SET_QUOTA = winnt::PROCESS_SET_QUOTA;
+        /// Required to set certain information about a process, such as its priority class.
+        const PROCESS_SET_INFORMATION = winnt::PROCESS_SET_INFORMATION;
+        /// Required to retrieve certain information about a process, such as its token,
+        /// exit code, and priority class.
+        const PROCESS_QUERY_INFORMATION = winnt::PROCESS_QUERY_INFORMATION;
+        /// Required to suspend or resume a process.
+        const PROCESS_SUSPEND_RESUME = winnt::PROCESS_SUSPEND_RESUME;
+        /// Required to retrieve certain information about a process
+        /// (exit code, priority class,job status, path).
+        ///
+        /// A handle that has the `PROCESS_QUERY_INFORMATION` access right is
+        /// automatically granted `PROCESS_QUERY_LIMITED_INFORMATION`.
+        const PROCESS_QUERY_LIMITED_INFORMATION = winnt::PROCESS_QUERY_LIMITED_INFORMATION;
+        const PROCESS_SET_LIMITED_INFORMATION = winnt::PROCESS_SET_LIMITED_INFORMATION;
+        /// All possible access rights for a process object.
+        const PROCESS_ALL_ACCESS = Self::STANDARD_RIGHTS_REQUIRED.bits | Self::SYNCHRONIZE.bits | 0xffff;
+    }
+}
+
+impl Default for Access {
+    /// Returns `Access::PROCESS_ALL_ACCESS`.
+    fn default() -> Access {
+        Access::PROCESS_ALL_ACCESS
     }
 }
 
@@ -472,12 +601,98 @@ impl<'a> Iterator for ThreadIdIter<'a> {
     }
 }
 
+/// A handle to a process's loaded module (dll).
+#[derive(Debug)]
+pub struct Module<'a> {
+    handle: HMODULE,
+    process: &'a Process,
+}
+
+impl<'a> Module<'a> {
+    /// Returns the base (file) name of the module.
+    pub fn name(&self) -> WinResult<String> {
+        unsafe {
+            let mut buffer: [WCHAR; MAX_PATH] = mem::zeroed();
+            let ret = GetModuleBaseNameW(
+                self.process.as_raw_handle(),
+                self.handle,
+                buffer.as_mut_ptr(),
+                MAX_PATH as _,
+            );
+            if ret == 0 {
+                Err(Error::last_os_error())
+            } else {
+                Ok(OsString::from_wide(&buffer[0..ret as usize])
+                    .to_string_lossy()
+                    .into_owned())
+            }
+        }
+    }
+
+    /// Returns the fully qualified path for the file that contains the module.
+    pub fn path(&self) -> WinResult<PathBuf> {
+        unsafe {
+            let mut buffer: [WCHAR; MAX_PATH] = mem::zeroed();
+            let ret = GetModuleFileNameExW(
+                self.process.as_raw_handle(),
+                self.handle,
+                buffer.as_mut_ptr(),
+                MAX_PATH as _,
+            );
+            if ret == 0 {
+                Err(Error::last_os_error())
+            } else {
+                Ok(OsString::from_wide(&buffer[0..ret as usize]).into())
+            }
+        }
+    }
+
+    /// Returns information about the module.
+    pub fn info(&self) -> WinResult<ModuleInfo> {
+        unsafe {
+            let mut c_info: MODULEINFO = mem::zeroed();
+            let ret = GetModuleInformation(
+                self.process.as_raw_handle(),
+                self.handle,
+                &mut c_info,
+                mem::size_of::<MODULEINFO>() as _,
+            );
+            if ret == 0 {
+                Err(Error::last_os_error())
+            } else {
+                Ok(c_info.into())
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ModuleInfo {
+    /// Base address of the module (equivalent to its HMODULE).
+    pub address: *mut c_void,
+    /// Size of the module in bytes.
+    pub size: usize,
+    /// Entry point of the module. While this is not the address of the `DllMain` function,
+    /// it should be close enough for most purposes.
+    pub entry_point: *mut c_void,
+}
+
+impl From<MODULEINFO> for ModuleInfo {
+    fn from(mi: MODULEINFO) -> ModuleInfo {
+        ModuleInfo {
+            address: mi.lpBaseOfDll,
+            size: mi.SizeOfImage as usize,
+            entry_point: mi.EntryPoint,
+        }
+    }
+}
+
 /// Holds data related to a module (dll) of a running process.
 ///
 /// Maps almost directly to a Windows [MODULEENTRY32W][MODULEENTRY32W].
 ///
 /// [MODULEENTRY32W]: https://msdn.microsoft.com/en-us/library/windows/desktop/ms684225(v=vs.85).aspx
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ModuleEntry {
     pub id: u32,
     pub name: String,
@@ -506,7 +721,7 @@ impl From<MODULEENTRY32W> for ModuleEntry {
             .iter()
             .position(|&b| b == 0)
             .unwrap_or_else(|| me.szModule.len());
-        let path = Path::new(&OsString::from_wide(&me.szExePath[..path_end])).to_owned();
+        let path = OsString::from_wide(&me.szExePath[..path_end]).into();
 
         ModuleEntry {
             id: me.th32ModuleID,
@@ -575,10 +790,18 @@ impl<'a> Iterator for ModuleEntryIter<'a> {
 //    }
 //
 //    #[test]
-//    fn enumerates_module_entries() {
+//    fn lists_modules() {
 //        let process = Process::all().unwrap().next().unwrap();
 //        let entries: Vec<_> = process.module_entries().unwrap().collect();
 //        assert_eq!(entries.is_empty(), false);
 //        println!("{:?}", entries);
+//    }
+//
+//    #[test]
+//    fn enumerates_module_entries() {
+//        let process = Process::all().unwrap().next().unwrap();
+//        let modules: Vec<_> = process.module_list().unwrap();
+//        assert_eq!(modules.is_empty(), false);
+//        println!("{:?}", modules);
 //    }
 //}
