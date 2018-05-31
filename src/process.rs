@@ -93,9 +93,16 @@ impl Process {
         }
     }
 
-    /// Creates a process handle from a name.
+    /// Creates a process handle from a name. Requests all access.
     pub fn from_name(name: &str) -> WinResult<Process> {
         Process::all()?
+            .find(|p| p.name().map(|n| n == name).unwrap_or(false))
+            .ok_or(Error::NoProcess(name.to_string()))
+    }
+
+    /// Creates a process handle from a name.
+    pub fn from_name_with_access(name: &str, access: Access) -> WinResult<Process> {
+        Process::all_with_access(access)?
             .find(|p| p.name().map(|n| n == name).unwrap_or(false))
             .ok_or(Error::NoProcess(name.to_string()))
     }
@@ -115,7 +122,7 @@ impl Process {
         &self.handle
     }
 
-    /// Enumerates all running processes.
+    /// Enumerates all running processes. Requests all access.
     pub fn all() -> WinResult<impl Iterator<Item = Process>> {
         unsafe {
             let snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
@@ -124,6 +131,22 @@ impl Process {
             } else {
                 Ok(ProcessIter {
                     snapshot: Handle::new(snap),
+                    access: Access::PROCESS_ALL_ACCESS,
+                }.filter_map(Result::ok))
+            }
+        }
+    }
+
+    /// Enumerates all running processes.
+    pub fn all_with_access(access: Access) -> WinResult<impl Iterator<Item = Process>> {
+        unsafe {
+            let snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+            if snap == INVALID_HANDLE_VALUE {
+                Err(Error::last_os_error())
+            } else {
+                Ok(ProcessIter {
+                    snapshot: Handle::new(snap),
+                    access,
                 }.filter_map(Result::ok))
             }
         }
@@ -313,6 +336,7 @@ impl IntoRawHandle for Process {
 #[derive(Debug)]
 struct ProcessIter {
     snapshot: Handle,
+    access: Access,
 }
 
 impl Iterator for ProcessIter {
@@ -327,7 +351,10 @@ impl Iterator for ProcessIter {
             if ret == 0 {
                 None
             } else {
-                Some(Process::from_id(entry.th32ProcessID))
+                Some(Process::from_id_with_access(
+                    entry.th32ProcessID,
+                    self.access,
+                ))
             }
         }
     }
