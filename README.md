@@ -9,5 +9,5 @@ Small wrapper over some process-related Windows APIs.
 
 ```toml
 [dependencies]
-winproc = "0.1.0"
+winproc = "0.2"
 ```
