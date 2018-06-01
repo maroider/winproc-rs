@@ -636,6 +636,11 @@ pub struct Module<'a> {
 }
 
 impl<'a> Module<'a> {
+    /// Returns the inner HMODULE handle (address) of the loaded module.
+    pub fn handle(&self) -> HMODULE {
+        self.handle
+    }
+
     /// Returns the base (file) name of the module.
     pub fn name(&self) -> WinResult<String> {
         unsafe {
