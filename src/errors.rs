@@ -1,4 +1,4 @@
-use std::{fmt, io};
+use std::{ffi, fmt, io};
 
 /// A Windows process error.
 #[derive(Debug, Fail)]
@@ -7,6 +7,13 @@ pub enum Error {
     Os(#[cause] io::Error),
     /// No process found during a search.
     NoProcess(String),
+    /// An invalid nul value was found in a UTF-8 string.
+    NulError(#[cause] ffi::NulError),
+    /// An invalid nul value was found in a UTF-16 string vector.
+    ///
+    /// The error indicates the position in the vector where the nul value was found, as well as
+    /// returning the ownership of the invalid vector.
+    NulErrorW { pos: usize, data: Vec<u16> },
 }
 
 impl Error {
@@ -17,17 +24,6 @@ impl Error {
             None
         }
     }
-
-    //    pub fn description(&self) -> Option<&'static str> {
-    //        if let Some(code) = self.code() {
-    //            match code {
-    //                31 => Some("This device is not working properly because Windows cannot load the drivers required for this device."),
-    //                _ => None
-    //            }
-    //        } else {
-    //            None
-    //        }
-    //    }
 
     /// Returns the last windows error.
     pub fn last_os_error() -> Error {
@@ -47,7 +43,17 @@ impl fmt::Display for Error {
                 write!(f, "Windows error: {}", e)
             }
             Error::NoProcess(ref name) => write!(f, "No process found with the name: {}", name),
+            Error::NulError(ref e) => write!(f, "Null byte error: {}", e),
+            Error::NulErrorW { ref pos, ref data } => {
+                write!(f, "Null byte UTF-16 error: pos {} in {:?}", pos, data)
+            }
         }
+    }
+}
+
+impl From<ffi::NulError> for Error {
+    fn from(e: ffi::NulError) -> Error {
+        Error::NulError(e)
     }
 }
 

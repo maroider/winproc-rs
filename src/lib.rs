@@ -7,6 +7,7 @@ extern crate bitflags;
 extern crate winapi;
 #[macro_use]
 extern crate failure;
+extern crate widestring;
 
 pub mod errors;
 mod handle;

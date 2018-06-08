@@ -1,5 +1,5 @@
 use std::{
-    ffi::OsString,
+    ffi::{CString, OsStr, OsString},
     mem,
     ops::Deref,
     os::windows::{
@@ -9,6 +9,7 @@ use std::{
     path::PathBuf,
 };
 
+use widestring::WideCString;
 use winapi::{
     ctypes::c_void,
     shared::{
@@ -17,6 +18,7 @@ use winapi::{
     },
     um::{
         handleapi::INVALID_HANDLE_VALUE,
+        libloaderapi::{GetModuleHandleW, GetProcAddress},
         processthreadsapi::{
             GetCurrentProcess,
             GetExitCodeProcess,
@@ -49,7 +51,12 @@ use winapi::{
             THREADENTRY32,
             Thread32Next,
         },
-        winbase::{GetProcessAffinityMask, QueryFullProcessImageNameW, SetThreadAffinityMask},
+        winbase::{
+            GetProcessAffinityMask,
+            QueryFullProcessImageNameW,
+            SetProcessAffinityMask,
+            SetThreadAffinityMask,
+        },
         winnt::{self, PROCESSOR_NUMBER, PROCESS_ALL_ACCESS, THREAD_ALL_ACCESS, WCHAR},
     },
 };
@@ -213,6 +220,39 @@ impl Process {
         }
     }
 
+    /// Sets the affinity mask of the thread. On success, returns the previous affinity mask.
+    ///
+    /// A process affinity mask is a bit vector in which each bit represents a logical processor
+    /// that a process is allowed to run on.
+    ///
+    /// Setting an affinity mask for a process or thread can result in threads receiving less
+    /// processor time, as the system is restricted from running the threads on certain processors.
+    /// In most cases, it is better to let the system select an available processor.
+    ///
+    /// If the new process affinity mask does not specify the processor that is currently running
+    /// the process, the process is rescheduled on one of the allowable processors.
+    pub fn set_affinity_mask(&mut self, mask: u32) -> WinResult<()> {
+        unsafe {
+            let ret = SetProcessAffinityMask(self.handle.as_raw_handle(), mask);
+            if ret == 0 {
+                Err(Error::last_os_error())
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+    //    /// Sets the affinity of the process to the single specified processor.
+    //    ///
+    //    /// If the processor index equals or exceeds the width of [`DWORD`], the mask is not changed.
+    //    pub fn set_affinity(&mut self, processor: u8) -> WinResult<()> {
+    //        if (processor as usize) < mem::size_of::<u32>() * 8 {
+    //            self.set_affinity_mask(1 << processor as u32)
+    //        } else {
+    //            Ok(())
+    //        }
+    //    }
+
     /// Returns an iterator over the threads of the process.
     pub fn threads<'a>(&'a self) -> WinResult<impl Iterator<Item = Thread> + 'a> {
         unsafe {
@@ -243,39 +283,56 @@ impl Process {
         }
     }
 
+    /// Returns the loaded module with the specified name/path.
+    pub fn module<'a, N: AsRef<OsStr>>(&'a self, name: N) -> WinResult<Module<'a>> {
+        unsafe {
+            let name = WideCString::from_str(name).map_err(|e| Error::NulErrorW {
+                pos: e.nul_position(),
+                data: e.into_vec(),
+            })?;
+            let ret = GetModuleHandleW(name.as_ptr());
+            if ret.is_null() {
+                Err(Error::last_os_error())
+            } else {
+                Ok(Module {
+                    handle: ret,
+                    process: self,
+                })
+            }
+        }
+    }
+
     /// Returns a list of the modules of the process.
     pub fn module_list<'a>(&'a self) -> WinResult<Vec<Module<'a>>> {
         unsafe {
             let mut mod_handles = Vec::new();
-            let mut last_needed = 0;
+            let mut reserved = 0;
             let mut needed = 0;
 
-            fn enum_mods(
-                process: &Process,
-                mod_handles: &mut [HMODULE],
-                needed: &mut u32,
-            ) -> WinResult<()> {
-                let res = unsafe {
-                    EnumProcessModulesEx(
-                        process.as_raw_handle(),
+            {
+                let enum_mods = |mod_handles: &mut [HMODULE], needed| {
+                    let res = EnumProcessModulesEx(
+                        self.as_raw_handle(),
                         mod_handles.as_mut_ptr(),
                         mem::size_of_val(&mod_handles[..]) as _,
                         needed,
                         LIST_MODULES_ALL,
-                    )
+                    );
+                    if res == 0 {
+                        Err(Error::last_os_error())
+                    } else {
+                        Ok(())
+                    }
                 };
-                if res == 0 {
-                    Err(Error::last_os_error())
-                } else {
-                    Ok(())
-                }
-            }
 
-            enum_mods(self, &mut mod_handles, &mut needed)?;
-            while needed > last_needed {
-                last_needed = needed;
-                mod_handles.resize(needed as usize, mem::zeroed());
-                enum_mods(self, &mut mod_handles, &mut needed)?;
+                loop {
+                    enum_mods(&mut mod_handles, &mut needed)?;
+                    if needed <= reserved {
+                        break;
+                    }
+                    reserved = needed;
+                    mod_handles.resize(needed as usize, mem::zeroed());
+                }
             }
 
             let modules = mod_handles[..needed as usize / mem::size_of::<HMODULE>()]
@@ -464,7 +521,7 @@ impl Thread {
         }
     }
 
-    /// Returns the preferred processor for the thread.
+    /// Returns the thread's ideal processor.
     pub fn ideal_processor(&self) -> WinResult<u32> {
         unsafe {
             let mut ideal: PROCESSOR_NUMBER = mem::zeroed();
@@ -477,8 +534,7 @@ impl Thread {
         }
     }
 
-    /// Sets the preferred processor for the thread.
-    /// On success, returns the previous idea processor.
+    /// Sets the thread's ideal processor. On success, returns the previous ideal processor.
     pub fn set_ideal_processor(&mut self, processor: u32) -> WinResult<u32> {
         unsafe {
             let ret = SetThreadIdealProcessor(self.handle.as_raw_handle(), processor as DWORD);
@@ -532,7 +588,7 @@ impl Thread {
         }
     }
 
-    /// Sets the affinity of the thread to the single given processor.
+    /// Sets the affinity of the thread to the single specified processor.
     ///
     /// If the processor index equals or exceeds the width of usize, the mask is not changed.
     /// On success, or if unchanged, returns the previous affinity mask.
@@ -628,7 +684,7 @@ impl<'a> Iterator for ThreadIdIter<'a> {
     }
 }
 
-/// A handle to a process's loaded module (dll).
+/// A handle to a process's loaded module.
 #[derive(Debug)]
 pub struct Module<'a> {
     handle: HMODULE,
@@ -661,7 +717,7 @@ impl<'a> Module<'a> {
         }
     }
 
-    /// Returns the fully qualified path for the file that contains the module.
+    /// Returns the fully qualified path to the file that contains the module.
     pub fn path(&self) -> WinResult<PathBuf> {
         unsafe {
             let mut buffer: [WCHAR; MAX_PATH] = mem::zeroed();
@@ -679,7 +735,7 @@ impl<'a> Module<'a> {
         }
     }
 
-    /// Returns information about the module.
+    /// Returns a struct containing the address, size, and entry point of the module.
     pub fn info(&self) -> WinResult<ModuleInfo> {
         unsafe {
             let mut c_info: MODULEINFO = mem::zeroed();
@@ -696,8 +752,21 @@ impl<'a> Module<'a> {
             }
         }
     }
+
+    /// Returns a void pointer to the function in the module with the specified name.
+    pub fn proc_address(&self, proc_name: &str) -> WinResult<*mut c_void> {
+        unsafe {
+            let ret = GetProcAddress(self.handle, CString::new(proc_name)?.as_ptr() as _);
+            if ret.is_null() {
+                Err(Error::last_os_error())
+            } else {
+                Ok(ret as *mut c_void)
+            }
+        }
+    }
 }
 
+/// Holds the address, size, and entry point of a loaded module.
 #[derive(Debug, Clone)]
 pub struct ModuleInfo {
     /// Base address of the module (equivalent to its HMODULE).
@@ -719,7 +788,7 @@ impl From<MODULEINFO> for ModuleInfo {
     }
 }
 
-/// Holds data related to a module (dll) of a running process.
+/// Holds data related to a module of a running process.
 ///
 /// Maps almost directly to a Windows [MODULEENTRY32W][MODULEENTRY32W].
 ///
@@ -835,5 +904,27 @@ impl<'a> Iterator for ModuleEntryIter<'a> {
 //        let modules: Vec<_> = process.module_list().unwrap();
 //        assert_eq!(modules.is_empty(), false);
 //        println!("{:?}", modules);
+//    }
+//
+//    #[test]
+//    fn retrieves_module() {
+//        let process = Process::all().unwrap().next().unwrap();
+//        let module = process.module("kernel32").unwrap();
+//        assert_eq!(module.name().unwrap().to_lowercase(), "kernel32.dll");
+//    }
+//
+//    #[test]
+//    fn proc_address() {
+//        use winapi::um::winnt::HANDLE;
+//        type GetProcessIdFn = extern "system" fn(HANDLE) -> DWORD;
+//
+//        let process = Process::all().unwrap().next().unwrap();
+//        let k32 = process.module("kernel32").unwrap();
+//
+//        unsafe {
+//            let get_process_id: GetProcessIdFn =
+//                mem::transmute(k32.proc_address("GetProcessId").unwrap());
+//            assert_eq!(get_process_id(process.as_raw_handle()), process.id());
+//        }
 //    }
 //}
