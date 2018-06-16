@@ -795,14 +795,25 @@ impl From<MODULEINFO> for ModuleInfo {
 /// [MODULEENTRY32W]: https://msdn.microsoft.com/en-us/library/windows/desktop/ms684225(v=vs.85).aspx
 #[derive(Debug, Clone)]
 pub struct ModuleEntry {
+    /// This member is no longer used, and is always set to one.
     pub id: u32,
+    /// The module's basename.
     pub name: String,
+    /// The path to the module's file.
     pub path: PathBuf,
+    /// A handle to the module in the context of the owning process.
     pub hmodule: HMODULE,
+    /// The identifier of the process in which the module is loaded.
     pub process_id: u32,
+    /// The load count of the module, which is not generally meaningful,
+    /// and usually equal to `0xffff`.
     pub global_load_count: u32,
+    /// The load count of the module (same as GlblcntUsage), which is not
+    /// generally meaningful, and usually equal to `0xffff`.
     pub proc_load_count: u32,
+    /// The base address of the module in the context of the owning process.
     pub mod_base_addr: *mut u8,
+    /// The size of the module, in bytes.
     pub mod_base_size: u32,
 }
 
