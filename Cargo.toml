@@ -1,6 +1,6 @@
 [package]
 name = "winproc"
-version = "0.3.1"
+version = "0.4.0"
 authors = ["Sam Green <sam.green81@gmail.com>"]
 description = "Small wrapper over some process-related Windows APIs."
 readme = "README.md"
@@ -13,6 +13,6 @@ gitlab = { repository = "samgreen/winproc-rs" }
 
 [dependencies]
 failure = "0.1"
-winapi = { version = "0.3", features = ["handleapi", "tlhelp32", "realtimeapiset", "winbase", "psapi"] }
+winapi = { version = "0.3", features = ["handleapi", "tlhelp32", "realtimeapiset", "winbase", "psapi", "sysinfoapi"] }
 bitflags = "1.0"
 widestring = "0.3"
