@@ -284,7 +284,7 @@ impl Process {
     }
 
     /// Returns the loaded module with the specified name/path.
-    pub fn module<'a, N: AsRef<OsStr>>(&'a self, name: N) -> WinResult<Module<'a>> {
+    pub fn module<N: AsRef<OsStr>>(&self, name: N) -> WinResult<Module> {
         unsafe {
             let name = WideCString::from_str(name).map_err(|e| Error::NulErrorW {
                 pos: e.nul_position(),
@@ -303,7 +303,7 @@ impl Process {
     }
 
     /// Returns a list of the modules of the process.
-    pub fn module_list<'a>(&'a self) -> WinResult<Vec<Module<'a>>> {
+    pub fn module_list(&self) -> WinResult<Vec<Module>> {
         unsafe {
             let mut mod_handles = Vec::new();
             let mut reserved = 0;
