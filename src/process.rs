@@ -165,7 +165,7 @@ impl Process {
     }
 
     /// Returns true if the process is running.
-    pub fn running(&self) -> bool {
+    pub fn is_running(&self) -> bool {
         unsafe {
             let mut status = 0;
             GetExitCodeProcess(self.handle.as_raw_handle(), &mut status);
