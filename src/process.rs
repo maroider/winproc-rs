@@ -558,15 +558,16 @@ impl Thread {
     /// Returns the thread's current affinity mask.
     pub fn affinity_mask(&self) -> WinResult<usize> {
         unsafe {
-            let ret = SetThreadAffinityMask(self.handle.as_raw_handle(), DWORD_PTR::max_value());
-            if ret == 0 {
+            let affinity =
+                SetThreadAffinityMask(self.handle.as_raw_handle(), DWORD_PTR::max_value());
+            if affinity == 0 {
                 Err(Error::last_os_error())
             } else {
-                let ret = SetThreadAffinityMask(self.handle.as_raw_handle(), ret);
+                let ret = SetThreadAffinityMask(self.handle.as_raw_handle(), affinity);
                 if ret == 0 {
                     Err(Error::last_os_error())
                 } else {
-                    Ok(ret)
+                    Ok(affinity)
                 }
             }
         }
