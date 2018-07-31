@@ -1,3 +1,7 @@
+use Error;
+use Handle;
+use WinResult;
+
 use std::{
     ffi::{CString, OsStr, OsString},
     mem,
@@ -8,7 +12,6 @@ use std::{
     },
     path::PathBuf,
 };
-
 use widestring::WideCString;
 use winapi::{
     ctypes::c_void,
@@ -21,6 +24,7 @@ use winapi::{
         libloaderapi::{GetModuleHandleW, GetProcAddress},
         processthreadsapi::{
             GetCurrentProcess,
+            GetCurrentThread,
             GetExitCodeProcess,
             GetProcessId,
             GetThreadId,
@@ -60,10 +64,6 @@ use winapi::{
         winnt::{self, PROCESSOR_NUMBER, PROCESS_ALL_ACCESS, THREAD_ALL_ACCESS, WCHAR},
     },
 };
-
-use Error;
-use Handle;
-use WinResult;
 
 /// A handle to a running process.
 #[derive(Debug)]
@@ -495,6 +495,15 @@ impl Thread {
                 Ok(Thread {
                     handle: Handle::new(handle),
                 })
+            }
+        }
+    }
+
+    /// Returns a handle to the current thread.
+    pub fn current() -> Thread {
+        unsafe {
+            Thread {
+                handle: Handle::from_raw_handle(GetCurrentThread()),
             }
         }
     }
