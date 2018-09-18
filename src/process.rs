@@ -220,7 +220,7 @@ impl Process {
         }
     }
 
-    /// Sets the affinity mask of the thread. On success, returns the previous affinity mask.
+    /// Sets the affinity mask of the process.
     ///
     /// A process affinity mask is a bit vector in which each bit represents a logical processor
     /// that a process is allowed to run on.
