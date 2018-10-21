@@ -377,7 +377,7 @@ impl Process {
     /// Returns the loaded module with the specified name/path.
     pub fn module<N: AsRef<OsStr>>(&self, name: N) -> WinResult<Module> {
         unsafe {
-            let name = WideCString::from_str(name).map_err(|e| Error::NulErrorW {
+            let name = WideCString::from_os_str(name).map_err(|e| Error::NulErrorW {
                 pos: e.nul_position(),
                 data: e.into_vec(),
             })?;

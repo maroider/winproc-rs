@@ -15,4 +15,4 @@ gitlab = { repository = "samgreen/winproc-rs" }
 failure = "0.1"
 winapi = { version = "0.3", features = ["handleapi", "tlhelp32", "realtimeapiset", "winbase", "psapi", "sysinfoapi"] }
 bitflags = "1.0"
-widestring = "0.3"
+widestring = "0.4"
