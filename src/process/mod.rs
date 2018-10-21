@@ -4,7 +4,7 @@ use self::{
 };
 pub use self::{
     module::{Module, ModuleEntry, ModuleInfo},
-    thread::Thread,
+    thread::{PriorityLevel, Thread},
 };
 use std::{
     ffi::{OsStr, OsString},

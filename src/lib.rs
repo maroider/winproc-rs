@@ -43,7 +43,16 @@ use winapi::{
 pub use self::{
     errors::{Error, WinResult},
     handle::Handle,
-    process::{Access, Module, ModuleEntry, ModuleInfo, Process, Thread},
+    process::{
+        Access,
+        Module,
+        ModuleEntry,
+        ModuleInfo,
+        PriorityClass,
+        PriorityLevel,
+        Process,
+        Thread,
+    },
 };
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
