@@ -25,7 +25,15 @@ use winapi::{
     um::{
         handleapi::INVALID_HANDLE_VALUE,
         libloaderapi::GetModuleHandleW,
-        processthreadsapi::{GetCurrentProcess, GetExitCodeProcess, GetProcessId, OpenProcess},
+        processthreadsapi::{
+            GetCurrentProcess,
+            GetExitCodeProcess,
+            GetPriorityClass,
+            GetProcessId,
+            OpenProcess,
+            SetPriorityClass,
+            TerminateProcess,
+        },
         psapi::{EnumProcessModulesEx, LIST_MODULES_ALL},
         tlhelp32::{
             CreateToolhelp32Snapshot,
@@ -36,7 +44,19 @@ use winapi::{
             TH32CS_SNAPPROCESS,
             TH32CS_SNAPTHREAD,
         },
-        winbase::{GetProcessAffinityMask, QueryFullProcessImageNameW, SetProcessAffinityMask},
+        winbase::{
+            GetProcessAffinityMask,
+            QueryFullProcessImageNameW,
+            SetProcessAffinityMask,
+            ABOVE_NORMAL_PRIORITY_CLASS,
+            BELOW_NORMAL_PRIORITY_CLASS,
+            HIGH_PRIORITY_CLASS,
+            IDLE_PRIORITY_CLASS,
+            NORMAL_PRIORITY_CLASS,
+            PROCESS_MODE_BACKGROUND_BEGIN,
+            PROCESS_MODE_BACKGROUND_END,
+            REALTIME_PRIORITY_CLASS,
+        },
         winnt::{self, PROCESS_ALL_ACCESS, WCHAR},
     },
 };
@@ -184,6 +204,92 @@ impl Process {
             .unwrap()
             .to_string_lossy()
             .into_owned())
+    }
+
+    /// Returns the priority class of the process.
+    ///
+    /// The handle must have the `PROCESS_QUERY_INFORMATION` or `PROCESS_QUERY_LIMITED_INFORMATION`
+    /// access right.
+    pub fn priority(&self) -> WinResult<PriorityClass> {
+        unsafe {
+            let ret = GetPriorityClass(self.handle.as_raw_handle());
+            if ret == 0 {
+                Err(Error::last_os_error())
+            } else {
+                Ok(PriorityClass::from_code(ret))
+            }
+        }
+    }
+
+    /// Sets the priority class of the process.
+    ///
+    /// The handle must have the `PROCESS_SET_INFORMATION` access right.
+    pub fn set_priority(&mut self, priority: PriorityClass) -> WinResult<()> {
+        unsafe {
+            let ret = SetPriorityClass(self.handle.as_raw_handle(), priority.as_code());
+            if ret == 0 {
+                Err(Error::last_os_error())
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+    /// Begins background processing mode.
+    ///
+    /// **This can be initiated only if the handle refers to the current process.**
+    ///
+    /// The system lowers the resource scheduling priorities of the process (and its threads) so
+    /// that it can perform background work without significantly affecting activity in
+    /// the foreground.
+    ///
+    /// The function fails if the process is already in background processing mode.
+    ///
+    /// The handle must have the `PROCESS_SET_INFORMATION` access right.
+    pub fn start_background_mode(&mut self) -> WinResult<()> {
+        unsafe {
+            let ret = SetPriorityClass(self.handle.as_raw_handle(), PROCESS_MODE_BACKGROUND_BEGIN);
+            if ret == 0 {
+                Err(Error::last_os_error())
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+    /// Ends background processing mode.
+    ///
+    /// **This can be initiated only if the handle refers to the current process.**
+    ///
+    /// The system restores the resource scheduling priorities of the process (and its threads) as
+    /// they were before the process entered background processing mode.
+    ///
+    /// The function fails if the process is not in background processing mode.
+    ///
+    /// The handle must have the `PROCESS_SET_INFORMATION` access right.
+    pub fn end_background_mode(&mut self) -> WinResult<()> {
+        unsafe {
+            let ret = SetPriorityClass(self.handle.as_raw_handle(), PROCESS_MODE_BACKGROUND_END);
+            if ret == 0 {
+                Err(Error::last_os_error())
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+    /// Terminates the process.
+    ///
+    /// The handle must have the `PROCESS_TERMINATE` access right.
+    pub fn terminate(&mut self, exit_code: u32) -> WinResult<()> {
+        unsafe {
+            let ret = TerminateProcess(self.handle.as_raw_handle(), exit_code);
+            if ret == 0 {
+                Err(Error::last_os_error())
+            } else {
+                Ok(())
+            }
+        }
     }
 
     /// Returns the affinity mask of the process.
@@ -460,6 +566,50 @@ impl Default for Access {
     /// Returns `Access::PROCESS_ALL_ACCESS`.
     fn default() -> Access {
         Access::PROCESS_ALL_ACCESS
+    }
+}
+
+/// A process scheduling priority class.
+///
+/// See [Scheduling Priorities](https://docs.microsoft.com/en-us/windows/desktop/procthread/scheduling-priorities)
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub enum PriorityClass {
+    Idle,
+    BelowNormal,
+    Normal,
+    AboveNormal,
+    High,
+    Realtime,
+}
+
+impl PriorityClass {
+    fn from_code(code: DWORD) -> PriorityClass {
+        match code {
+            IDLE_PRIORITY_CLASS => PriorityClass::Idle,
+            BELOW_NORMAL_PRIORITY_CLASS => PriorityClass::BelowNormal,
+            NORMAL_PRIORITY_CLASS => PriorityClass::Normal,
+            ABOVE_NORMAL_PRIORITY_CLASS => PriorityClass::AboveNormal,
+            HIGH_PRIORITY_CLASS => PriorityClass::High,
+            REALTIME_PRIORITY_CLASS => PriorityClass::Realtime,
+            _ => panic!("Unexpected priority code: {}", code),
+        }
+    }
+
+    fn as_code(&self) -> DWORD {
+        match self {
+            PriorityClass::Idle => IDLE_PRIORITY_CLASS,
+            PriorityClass::BelowNormal => BELOW_NORMAL_PRIORITY_CLASS,
+            PriorityClass::Normal => NORMAL_PRIORITY_CLASS,
+            PriorityClass::AboveNormal => ABOVE_NORMAL_PRIORITY_CLASS,
+            PriorityClass::High => HIGH_PRIORITY_CLASS,
+            PriorityClass::Realtime => REALTIME_PRIORITY_CLASS,
+        }
+    }
+}
+
+impl Default for PriorityClass {
+    fn default() -> PriorityClass {
+        PriorityClass::Normal
     }
 }
 

@@ -13,12 +13,28 @@ use winapi::{
             GetCurrentThread,
             GetThreadId,
             GetThreadIdealProcessorEx,
+            GetThreadPriority,
             OpenThread,
+            ResumeThread,
             SetThreadIdealProcessor,
+            SetThreadPriority,
+            SuspendThread,
+            TerminateThread,
         },
         realtimeapiset::QueryThreadCycleTime,
         tlhelp32::{Thread32Next, THREADENTRY32},
-        winbase::SetThreadAffinityMask,
+        winbase::{
+            SetThreadAffinityMask,
+            THREAD_MODE_BACKGROUND_BEGIN,
+            THREAD_MODE_BACKGROUND_END,
+            THREAD_PRIORITY_ABOVE_NORMAL,
+            THREAD_PRIORITY_BELOW_NORMAL,
+            THREAD_PRIORITY_HIGHEST,
+            THREAD_PRIORITY_IDLE,
+            THREAD_PRIORITY_LOWEST,
+            THREAD_PRIORITY_NORMAL,
+            THREAD_PRIORITY_TIME_CRITICAL,
+        },
         winnt::{self, PROCESSOR_NUMBER, THREAD_ALL_ACCESS},
     },
 };
@@ -75,6 +91,130 @@ impl Thread {
                 Err(Error::last_os_error())
             } else {
                 Ok(cycles as u64)
+            }
+        }
+    }
+
+    /// Returns the priority level of the thread.
+    ///
+    /// The handle must have the `THREAD_QUERY_INFORMATION` or `THREAD_QUERY_LIMITED_INFORMATION`
+    /// access right.
+    pub fn priority(&self) -> WinResult<PriorityLevel> {
+        unsafe {
+            let ret = GetThreadPriority(self.handle.as_raw_handle());
+            if ret == 0 {
+                Err(Error::last_os_error())
+            } else {
+                Ok(PriorityLevel::from_code(ret as _))
+            }
+        }
+    }
+
+    /// Sets the priority level of the thread.
+    ///
+    /// The handle must have the `THREAD_SET_INFORMATION` or `THREAD_SET_LIMITED_INFORMATION`
+    /// access right.
+    pub fn set_priority(&mut self, priority: PriorityLevel) -> WinResult<()> {
+        unsafe {
+            let ret = SetThreadPriority(self.handle.as_raw_handle(), priority.as_code() as _);
+            if ret == 0 {
+                Err(Error::last_os_error())
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+    /// Begins background processing mode.
+    ///
+    /// **This can be initiated only if the handle refers to the current thread.**
+    ///
+    /// The system lowers the resource scheduling priorities of the thread so that it can perform
+    /// background work without significantly affecting activity in the foreground.
+    ///
+    /// The function fails if the thread is already in background processing mode.
+    ///
+    /// The handle must have the `THREAD_SET_INFORMATION` or `THREAD_SET_LIMITED_INFORMATION`
+    /// access right.
+    pub fn start_background_mode(&mut self) -> WinResult<()> {
+        unsafe {
+            let ret = SetThreadPriority(
+                self.handle.as_raw_handle(),
+                THREAD_MODE_BACKGROUND_BEGIN as _,
+            );
+            if ret == 0 {
+                Err(Error::last_os_error())
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+    /// Ends background processing mode.
+    ///
+    /// **This can be initiated only if the handle refers to the current thread.**
+    ///
+    /// The system restores the resource scheduling priorities of the thread as
+    /// they were before the thread entered background processing mode.
+    ///
+    /// The function fails if the thread is not in background processing mode.
+    ///
+    /// The handle must have the `THREAD_SET_INFORMATION` or `THREAD_SET_LIMITED_INFORMATION`
+    /// access right.
+    pub fn end_background_mode(&mut self) -> WinResult<()> {
+        unsafe {
+            let ret =
+                SetThreadPriority(self.handle.as_raw_handle(), THREAD_MODE_BACKGROUND_END as _);
+            if ret == 0 {
+                Err(Error::last_os_error())
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+    /// Suspends the thread.
+    ///
+    /// If the function succeeds, the return value is the thread's previous suspend count.
+    ///
+    /// The handle must have the `THREAD_SUSPEND_RESUME` access right.
+    pub fn suspend(&mut self) -> WinResult<u32> {
+        unsafe {
+            let ret = SuspendThread(self.handle.as_raw_handle());
+            if ret == u32::max_value() {
+                Err(Error::last_os_error())
+            } else {
+                Ok(ret)
+            }
+        }
+    }
+
+    /// Resumes the thread.
+    ///
+    /// If the function succeeds, the return value is the thread's previous suspend count.
+    ///
+    /// The handle must have the `THREAD_SUSPEND_RESUME` access right.
+    pub fn resume(&mut self) -> WinResult<u32> {
+        unsafe {
+            let ret = ResumeThread(self.handle.as_raw_handle());
+            if ret == u32::max_value() {
+                Err(Error::last_os_error())
+            } else {
+                Ok(ret)
+            }
+        }
+    }
+
+    /// Terminates the thread.
+    ///
+    /// The handle must have the `THREAD_TERMINATE` access right.
+    pub fn terminate(&mut self, exit_code: u32) -> WinResult<()> {
+        unsafe {
+            let ret = TerminateThread(self.handle.as_raw_handle(), exit_code);
+            if ret == 0 {
+                Err(Error::last_os_error())
+            } else {
+                Ok(())
             }
         }
     }
@@ -240,6 +380,53 @@ impl<'a> Iterator for ThreadIdIter<'a> {
                 }
             }
         }
+    }
+}
+
+/// A thread scheduling priority level.
+///
+/// See [Scheduling Priorities](https://docs.microsoft.com/en-us/windows/desktop/procthread/scheduling-priorities)
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub enum PriorityLevel {
+    Idle,
+    Lowest,
+    BelowNormal,
+    Normal,
+    AboveNormal,
+    Highest,
+    TimeCritical,
+}
+
+impl PriorityLevel {
+    fn from_code(code: DWORD) -> PriorityLevel {
+        match code {
+            THREAD_PRIORITY_IDLE => PriorityLevel::Idle,
+            THREAD_PRIORITY_LOWEST => PriorityLevel::Lowest,
+            THREAD_PRIORITY_BELOW_NORMAL => PriorityLevel::BelowNormal,
+            THREAD_PRIORITY_NORMAL => PriorityLevel::Normal,
+            THREAD_PRIORITY_ABOVE_NORMAL => PriorityLevel::AboveNormal,
+            THREAD_PRIORITY_HIGHEST => PriorityLevel::Highest,
+            THREAD_PRIORITY_TIME_CRITICAL => PriorityLevel::TimeCritical,
+            _ => panic!("Unexpected priority code: {}", code),
+        }
+    }
+
+    fn as_code(&self) -> DWORD {
+        match self {
+            PriorityLevel::Idle => THREAD_PRIORITY_IDLE,
+            PriorityLevel::Lowest => THREAD_PRIORITY_LOWEST,
+            PriorityLevel::BelowNormal => THREAD_PRIORITY_BELOW_NORMAL,
+            PriorityLevel::Normal => THREAD_PRIORITY_NORMAL,
+            PriorityLevel::AboveNormal => THREAD_PRIORITY_ABOVE_NORMAL,
+            PriorityLevel::Highest => THREAD_PRIORITY_HIGHEST,
+            PriorityLevel::TimeCritical => THREAD_PRIORITY_TIME_CRITICAL,
+        }
+    }
+}
+
+impl Default for PriorityLevel {
+    fn default() -> PriorityLevel {
+        PriorityLevel::Normal
     }
 }
 
