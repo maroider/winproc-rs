@@ -57,12 +57,15 @@ pub use self::{
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum ProcessorArchitecture {
+    /// x64 (AMD or Intel)
     AMD64,
     Alpha,
     Alpha64,
     ARM,
     ARM64,
+    /// Intel Itanium-based
     IA64,
+    /// x86
     Intel,
     PPC,
     SHX,
