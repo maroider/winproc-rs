@@ -57,4 +57,10 @@ impl From<ffi::NulError> for Error {
     }
 }
 
-pub type WinResult<T> = ::std::result::Result<T, Error>;
+impl From<io::Error> for Error {
+    fn from(e: io::Error) -> Error {
+        Error::Os(e)
+    }
+}
+
+pub type WinResult<T> = Result<T, Error>;
