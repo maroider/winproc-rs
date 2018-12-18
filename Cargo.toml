@@ -8,11 +8,17 @@ license = "MIT"
 repository = "https://gitlab.com/samgreen/winproc-rs"
 keywords = ["windows"]
 
+[package.metadata.docs.rs]
+default-target = "x86_64-pc-windows-msvc"
+
 [badges]
 gitlab = { repository = "samgreen/winproc-rs" }
 
 [dependencies]
 failure = "0.1"
-winapi = { version = "0.3", features = ["handleapi", "tlhelp32", "realtimeapiset", "winbase", "psapi", "sysinfoapi"] }
 bitflags = "1.0"
 widestring = "0.4"
+
+[dependencies.winapi]
+version = "0.3"
+features = ["handleapi", "tlhelp32", "realtimeapiset", "winbase", "psapi", "sysinfoapi"]
