@@ -11,7 +11,7 @@ use winapi::{
         libloaderapi::GetProcAddress,
         psapi::{GetModuleBaseNameW, GetModuleFileNameExW, GetModuleInformation, MODULEINFO},
         tlhelp32::{Module32NextW, MODULEENTRY32W},
-        winnt::WCHAR,
+        winnt::{self, WCHAR},
     },
 };
 use Error;
@@ -37,7 +37,7 @@ impl<'a> Module<'a> {
         unsafe {
             let mut buffer: [WCHAR; MAX_PATH] = mem::zeroed();
             let ret = GetModuleBaseNameW(
-                self.process.as_raw_handle(),
+                self.process.as_raw_handle() as winnt::HANDLE,
                 self.handle,
                 buffer.as_mut_ptr(),
                 MAX_PATH as _,
@@ -57,7 +57,7 @@ impl<'a> Module<'a> {
         unsafe {
             let mut buffer: [WCHAR; MAX_PATH] = mem::zeroed();
             let ret = GetModuleFileNameExW(
-                self.process.as_raw_handle(),
+                self.process.as_raw_handle() as winnt::HANDLE,
                 self.handle,
                 buffer.as_mut_ptr(),
                 MAX_PATH as _,
@@ -75,7 +75,7 @@ impl<'a> Module<'a> {
         unsafe {
             let mut c_info: MODULEINFO = mem::zeroed();
             let ret = GetModuleInformation(
-                self.process.as_raw_handle(),
+                self.process.as_raw_handle() as winnt::HANDLE,
                 self.handle,
                 &mut c_info,
                 mem::size_of::<MODULEINFO>() as _,
@@ -197,7 +197,7 @@ impl<'a> Iterator for ModuleEntryIter<'a> {
         unsafe {
             let mut entry: MODULEENTRY32W = mem::zeroed();
             entry.dwSize = mem::size_of::<MODULEENTRY32W>() as DWORD;
-            let ret = Module32NextW(self.snapshot.as_raw_handle(), &mut entry);
+            let ret = Module32NextW(self.snapshot.as_raw_handle() as winnt::HANDLE, &mut entry);
             if ret == 0 {
                 None
             } else {

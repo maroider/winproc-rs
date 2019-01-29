@@ -1,7 +1,7 @@
 use std::{
     io,
     ops::Deref,
-    os::windows::io::{AsRawHandle, FromRawHandle, IntoRawHandle},
+    os::windows::io::{AsRawHandle, FromRawHandle, IntoRawHandle, RawHandle},
     ptr::null_mut,
 };
 
@@ -52,8 +52,8 @@ impl Handle {
 }
 
 impl AsRawHandle for Handle {
-    fn as_raw_handle(&self) -> winnt::HANDLE {
-        self.0
+    fn as_raw_handle(&self) -> RawHandle {
+        self.0 as RawHandle
     }
 }
 
@@ -72,13 +72,13 @@ impl Drop for Handle {
 }
 
 impl FromRawHandle for Handle {
-    unsafe fn from_raw_handle(handle: winnt::HANDLE) -> Handle {
-        Handle(handle)
+    unsafe fn from_raw_handle(handle: RawHandle) -> Handle {
+        Handle(handle as winnt::HANDLE)
     }
 }
 
 impl IntoRawHandle for Handle {
-    fn into_raw_handle(self) -> winnt::HANDLE {
-        self.0
+    fn into_raw_handle(self) -> RawHandle {
+        self.0 as RawHandle
     }
 }

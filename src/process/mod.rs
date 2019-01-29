@@ -11,7 +11,7 @@ use std::{
     mem,
     ops::Deref,
     os::windows::{
-        io::{AsRawHandle, FromRawHandle, IntoRawHandle},
+        io::{AsRawHandle, FromRawHandle, IntoRawHandle, RawHandle},
         prelude::*,
     },
     path::PathBuf,
@@ -123,7 +123,7 @@ impl Process {
 
     /// Returns a handle to the current process.
     pub fn current() -> Process {
-        unsafe { Process::from_handle(Handle::from_raw_handle(GetCurrentProcess())) }
+        unsafe { Process::from_handle(Handle::from_raw_handle(GetCurrentProcess() as RawHandle)) }
     }
 
     /// Returns a reference to the inner handle.
@@ -165,14 +165,14 @@ impl Process {
 
     /// Returns the process's id.
     pub fn id(&self) -> u32 {
-        unsafe { GetProcessId(self.handle.as_raw_handle()) }
+        unsafe { GetProcessId(self.handle.as_raw_handle() as winnt::HANDLE) }
     }
 
     /// Returns true if the process is running.
     pub fn is_running(&self) -> bool {
         unsafe {
             let mut status = 0;
-            GetExitCodeProcess(self.handle.as_raw_handle(), &mut status);
+            GetExitCodeProcess(self.handle.as_raw_handle() as winnt::HANDLE, &mut status);
             status == 259
         }
     }
@@ -183,7 +183,7 @@ impl Process {
             let mut size = MAX_PATH as u32;
             let mut buffer: [WCHAR; MAX_PATH] = mem::zeroed();
             let ret = QueryFullProcessImageNameW(
-                self.handle.as_raw_handle(),
+                self.handle.as_raw_handle() as winnt::HANDLE,
                 0,
                 buffer.as_mut_ptr(),
                 &mut size,
@@ -212,7 +212,7 @@ impl Process {
     /// access right.
     pub fn priority(&self) -> WinResult<PriorityClass> {
         unsafe {
-            let ret = GetPriorityClass(self.handle.as_raw_handle());
+            let ret = GetPriorityClass(self.handle.as_raw_handle() as winnt::HANDLE);
             if ret == 0 {
                 Err(Error::last_os_error())
             } else {
@@ -226,7 +226,10 @@ impl Process {
     /// The handle must have the `PROCESS_SET_INFORMATION` access right.
     pub fn set_priority(&mut self, priority: PriorityClass) -> WinResult<()> {
         unsafe {
-            let ret = SetPriorityClass(self.handle.as_raw_handle(), priority.as_code());
+            let ret = SetPriorityClass(
+                self.handle.as_raw_handle() as winnt::HANDLE,
+                priority.as_code(),
+            );
             if ret == 0 {
                 Err(Error::last_os_error())
             } else {
@@ -248,7 +251,10 @@ impl Process {
     /// The handle must have the `PROCESS_SET_INFORMATION` access right.
     pub fn start_background_mode(&mut self) -> WinResult<()> {
         unsafe {
-            let ret = SetPriorityClass(self.handle.as_raw_handle(), PROCESS_MODE_BACKGROUND_BEGIN);
+            let ret = SetPriorityClass(
+                self.handle.as_raw_handle() as winnt::HANDLE,
+                PROCESS_MODE_BACKGROUND_BEGIN,
+            );
             if ret == 0 {
                 Err(Error::last_os_error())
             } else {
@@ -269,7 +275,10 @@ impl Process {
     /// The handle must have the `PROCESS_SET_INFORMATION` access right.
     pub fn end_background_mode(&mut self) -> WinResult<()> {
         unsafe {
-            let ret = SetPriorityClass(self.handle.as_raw_handle(), PROCESS_MODE_BACKGROUND_END);
+            let ret = SetPriorityClass(
+                self.handle.as_raw_handle() as winnt::HANDLE,
+                PROCESS_MODE_BACKGROUND_END,
+            );
             if ret == 0 {
                 Err(Error::last_os_error())
             } else {
@@ -283,7 +292,7 @@ impl Process {
     /// The handle must have the `PROCESS_TERMINATE` access right.
     pub fn terminate(&mut self, exit_code: u32) -> WinResult<()> {
         unsafe {
-            let ret = TerminateProcess(self.handle.as_raw_handle(), exit_code);
+            let ret = TerminateProcess(self.handle.as_raw_handle() as winnt::HANDLE, exit_code);
             if ret == 0 {
                 Err(Error::last_os_error())
             } else {
@@ -298,7 +307,7 @@ impl Process {
             let mut process_mask: DWORD_PTR = 0;
             let mut system_mask: DWORD_PTR = 0;
             let ret = GetProcessAffinityMask(
-                self.handle.as_raw_handle(),
+                self.handle.as_raw_handle() as winnt::HANDLE,
                 &mut process_mask,
                 &mut system_mask,
             );
@@ -323,7 +332,7 @@ impl Process {
     /// the process, the process is rescheduled on one of the allowable processors.
     pub fn set_affinity_mask(&mut self, mask: u32) -> WinResult<()> {
         unsafe {
-            let ret = SetProcessAffinityMask(self.handle.as_raw_handle(), mask);
+            let ret = SetProcessAffinityMask(self.handle.as_raw_handle() as winnt::HANDLE, mask);
             if ret == 0 {
                 Err(Error::last_os_error())
             } else {
@@ -403,7 +412,7 @@ impl Process {
             {
                 let enum_mods = |mod_handles: &mut [HMODULE], needed| {
                     let res = EnumProcessModulesEx(
-                        self.as_raw_handle(),
+                        self.as_raw_handle() as winnt::HANDLE,
                         mod_handles.as_mut_ptr(),
                         mem::size_of_val(&mod_handles[..]) as _,
                         needed,
@@ -454,7 +463,7 @@ impl Process {
 }
 
 impl AsRawHandle for Process {
-    fn as_raw_handle(&self) -> winnt::HANDLE {
+    fn as_raw_handle(&self) -> RawHandle {
         self.handle.as_raw_handle()
     }
 }
@@ -468,15 +477,15 @@ impl Deref for Process {
 }
 
 impl FromRawHandle for Process {
-    unsafe fn from_raw_handle(handle: winnt::HANDLE) -> Process {
+    unsafe fn from_raw_handle(handle: RawHandle) -> Process {
         Process {
-            handle: Handle::new(handle),
+            handle: Handle::new(handle as winnt::HANDLE),
         }
     }
 }
 
 impl IntoRawHandle for Process {
-    fn into_raw_handle(self) -> winnt::HANDLE {
+    fn into_raw_handle(self) -> RawHandle {
         self.handle.into_raw_handle()
     }
 }
@@ -494,8 +503,7 @@ impl Iterator for ProcessIter {
         unsafe {
             let mut entry: PROCESSENTRY32 = mem::zeroed();
             entry.dwSize = mem::size_of::<PROCESSENTRY32>() as DWORD;
-            let ret = Process32Next(self.snapshot.as_raw_handle(), &mut entry);
-            //            if ret == 0 || Error::last().code() == 18 {
+            let ret = Process32Next(self.snapshot.as_raw_handle() as winnt::HANDLE, &mut entry);
             if ret == 0 {
                 None
             } else {

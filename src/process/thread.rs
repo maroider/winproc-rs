@@ -1,7 +1,7 @@
 use std::{
     mem,
     ops::Deref,
-    os::windows::io::{AsRawHandle, FromRawHandle, IntoRawHandle},
+    os::windows::io::{AsRawHandle, FromRawHandle, IntoRawHandle, RawHandle},
 };
 use winapi::{
     shared::{
@@ -68,7 +68,7 @@ impl Thread {
     pub fn current() -> Thread {
         unsafe {
             Thread {
-                handle: Handle::from_raw_handle(GetCurrentThread()),
+                handle: Handle::from_raw_handle(GetCurrentThread() as RawHandle),
             }
         }
     }
@@ -79,14 +79,15 @@ impl Thread {
 
     /// Return's the thread's ID.
     pub fn id(&self) -> u32 {
-        unsafe { GetThreadId(self.handle.as_raw_handle()) }
+        unsafe { GetThreadId(self.handle.as_raw_handle() as winnt::HANDLE) }
     }
 
     /// Returns the thread's cycle time.
     pub fn cycle_time(&self) -> WinResult<u64> {
         unsafe {
             let mut cycles: ULONG64 = 0;
-            let ret = QueryThreadCycleTime(self.handle.as_raw_handle(), &mut cycles);
+            let ret =
+                QueryThreadCycleTime(self.handle.as_raw_handle() as winnt::HANDLE, &mut cycles);
             if ret == 0 {
                 Err(Error::last_os_error())
             } else {
@@ -101,7 +102,7 @@ impl Thread {
     /// access right.
     pub fn priority(&self) -> WinResult<PriorityLevel> {
         unsafe {
-            let ret = GetThreadPriority(self.handle.as_raw_handle());
+            let ret = GetThreadPriority(self.handle.as_raw_handle() as winnt::HANDLE);
             if ret == 0 {
                 Err(Error::last_os_error())
             } else {
@@ -116,7 +117,10 @@ impl Thread {
     /// access right.
     pub fn set_priority(&mut self, priority: PriorityLevel) -> WinResult<()> {
         unsafe {
-            let ret = SetThreadPriority(self.handle.as_raw_handle(), priority.as_code() as _);
+            let ret = SetThreadPriority(
+                self.handle.as_raw_handle() as winnt::HANDLE,
+                priority.as_code() as _,
+            );
             if ret == 0 {
                 Err(Error::last_os_error())
             } else {
@@ -139,7 +143,7 @@ impl Thread {
     pub fn start_background_mode(&mut self) -> WinResult<()> {
         unsafe {
             let ret = SetThreadPriority(
-                self.handle.as_raw_handle(),
+                self.handle.as_raw_handle() as winnt::HANDLE,
                 THREAD_MODE_BACKGROUND_BEGIN as _,
             );
             if ret == 0 {
@@ -163,8 +167,10 @@ impl Thread {
     /// access right.
     pub fn end_background_mode(&mut self) -> WinResult<()> {
         unsafe {
-            let ret =
-                SetThreadPriority(self.handle.as_raw_handle(), THREAD_MODE_BACKGROUND_END as _);
+            let ret = SetThreadPriority(
+                self.handle.as_raw_handle() as winnt::HANDLE,
+                THREAD_MODE_BACKGROUND_END as _,
+            );
             if ret == 0 {
                 Err(Error::last_os_error())
             } else {
@@ -180,7 +186,7 @@ impl Thread {
     /// The handle must have the `THREAD_SUSPEND_RESUME` access right.
     pub fn suspend(&mut self) -> WinResult<u32> {
         unsafe {
-            let ret = SuspendThread(self.handle.as_raw_handle());
+            let ret = SuspendThread(self.handle.as_raw_handle() as winnt::HANDLE);
             if ret == u32::max_value() {
                 Err(Error::last_os_error())
             } else {
@@ -196,7 +202,7 @@ impl Thread {
     /// The handle must have the `THREAD_SUSPEND_RESUME` access right.
     pub fn resume(&mut self) -> WinResult<u32> {
         unsafe {
-            let ret = ResumeThread(self.handle.as_raw_handle());
+            let ret = ResumeThread(self.handle.as_raw_handle() as winnt::HANDLE);
             if ret == u32::max_value() {
                 Err(Error::last_os_error())
             } else {
@@ -210,7 +216,7 @@ impl Thread {
     /// The handle must have the `THREAD_TERMINATE` access right.
     pub fn terminate(&mut self, exit_code: u32) -> WinResult<()> {
         unsafe {
-            let ret = TerminateThread(self.handle.as_raw_handle(), exit_code);
+            let ret = TerminateThread(self.handle.as_raw_handle() as winnt::HANDLE, exit_code);
             if ret == 0 {
                 Err(Error::last_os_error())
             } else {
@@ -223,7 +229,8 @@ impl Thread {
     pub fn ideal_processor(&self) -> WinResult<u32> {
         unsafe {
             let mut ideal: PROCESSOR_NUMBER = mem::zeroed();
-            let ret = GetThreadIdealProcessorEx(self.handle.as_raw_handle(), &mut ideal);
+            let ret =
+                GetThreadIdealProcessorEx(self.handle.as_raw_handle() as winnt::HANDLE, &mut ideal);
             if ret == 0 {
                 Err(Error::last_os_error())
             } else {
@@ -235,7 +242,10 @@ impl Thread {
     /// Sets the thread's ideal processor. On success, returns the previous ideal processor.
     pub fn set_ideal_processor(&mut self, processor: u32) -> WinResult<u32> {
         unsafe {
-            let ret = SetThreadIdealProcessor(self.handle.as_raw_handle(), processor as DWORD);
+            let ret = SetThreadIdealProcessor(
+                self.handle.as_raw_handle() as winnt::HANDLE,
+                processor as DWORD,
+            );
             if ret == DWORD::max_value() {
                 Err(Error::last_os_error())
             } else {
@@ -247,12 +257,15 @@ impl Thread {
     /// Returns the thread's current affinity mask.
     pub fn affinity_mask(&self) -> WinResult<usize> {
         unsafe {
-            let affinity =
-                SetThreadAffinityMask(self.handle.as_raw_handle(), DWORD_PTR::max_value());
+            let affinity = SetThreadAffinityMask(
+                self.handle.as_raw_handle() as winnt::HANDLE,
+                DWORD_PTR::max_value(),
+            );
             if affinity == 0 {
                 Err(Error::last_os_error())
             } else {
-                let ret = SetThreadAffinityMask(self.handle.as_raw_handle(), affinity);
+                let ret =
+                    SetThreadAffinityMask(self.handle.as_raw_handle() as winnt::HANDLE, affinity);
                 if ret == 0 {
                     Err(Error::last_os_error())
                 } else {
@@ -278,7 +291,10 @@ impl Thread {
     /// the thread, the thread is rescheduled on one of the allowable processors.
     pub fn set_affinity_mask(&mut self, mask: usize) -> WinResult<usize> {
         unsafe {
-            let ret = SetThreadAffinityMask(self.handle.as_raw_handle(), mask as DWORD_PTR);
+            let ret = SetThreadAffinityMask(
+                self.handle.as_raw_handle() as winnt::HANDLE,
+                mask as DWORD_PTR,
+            );
             if ret == 0 {
                 Err(Error::last_os_error())
             } else {
@@ -302,7 +318,7 @@ impl Thread {
 }
 
 impl AsRawHandle for Thread {
-    fn as_raw_handle(&self) -> winnt::HANDLE {
+    fn as_raw_handle(&self) -> RawHandle {
         self.handle.as_raw_handle()
     }
 }
@@ -316,15 +332,15 @@ impl Deref for Thread {
 }
 
 impl FromRawHandle for Thread {
-    unsafe fn from_raw_handle(handle: winnt::HANDLE) -> Thread {
+    unsafe fn from_raw_handle(handle: RawHandle) -> Thread {
         Thread {
-            handle: Handle::new(handle),
+            handle: Handle::new(handle as winnt::HANDLE),
         }
     }
 }
 
 impl IntoRawHandle for Thread {
-    fn into_raw_handle(self) -> winnt::HANDLE {
+    fn into_raw_handle(self) -> RawHandle {
         self.handle.into_raw_handle()
     }
 }
@@ -343,7 +359,7 @@ impl<'a> Iterator for ThreadIter<'a> {
             loop {
                 let mut entry: THREADENTRY32 = mem::zeroed();
                 entry.dwSize = mem::size_of::<THREADENTRY32>() as DWORD;
-                let ret = Thread32Next(self.snapshot.as_raw_handle(), &mut entry);
+                let ret = Thread32Next(self.snapshot.as_raw_handle() as winnt::HANDLE, &mut entry);
                 if ret == 0 {
                     return None;
                 } else {
@@ -370,7 +386,7 @@ impl<'a> Iterator for ThreadIdIter<'a> {
             loop {
                 let mut entry: THREADENTRY32 = mem::zeroed();
                 entry.dwSize = mem::size_of::<THREADENTRY32>() as DWORD;
-                let ret = Thread32Next(self.snapshot.as_raw_handle(), &mut entry);
+                let ret = Thread32Next(self.snapshot.as_raw_handle() as winnt::HANDLE, &mut entry);
                 if ret == 0 {
                     return None;
                 } else {
