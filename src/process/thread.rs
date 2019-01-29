@@ -115,7 +115,7 @@ impl Thread {
     ///
     /// The handle must have the `THREAD_SET_INFORMATION` or `THREAD_SET_LIMITED_INFORMATION`
     /// access right.
-    pub fn set_priority(&mut self, priority: PriorityLevel) -> WinResult<()> {
+    pub fn set_priority(&mut self, priority: PriorityLevel) -> WinResult {
         unsafe {
             let ret = SetThreadPriority(
                 self.handle.as_raw_handle() as winnt::HANDLE,
@@ -140,7 +140,7 @@ impl Thread {
     ///
     /// The handle must have the `THREAD_SET_INFORMATION` or `THREAD_SET_LIMITED_INFORMATION`
     /// access right.
-    pub fn start_background_mode(&mut self) -> WinResult<()> {
+    pub fn start_background_mode(&mut self) -> WinResult {
         unsafe {
             let ret = SetThreadPriority(
                 self.handle.as_raw_handle() as winnt::HANDLE,
@@ -165,7 +165,7 @@ impl Thread {
     ///
     /// The handle must have the `THREAD_SET_INFORMATION` or `THREAD_SET_LIMITED_INFORMATION`
     /// access right.
-    pub fn end_background_mode(&mut self) -> WinResult<()> {
+    pub fn end_background_mode(&mut self) -> WinResult {
         unsafe {
             let ret = SetThreadPriority(
                 self.handle.as_raw_handle() as winnt::HANDLE,
@@ -214,7 +214,7 @@ impl Thread {
     /// Terminates the thread.
     ///
     /// The handle must have the `THREAD_TERMINATE` access right.
-    pub fn terminate(&mut self, exit_code: u32) -> WinResult<()> {
+    pub fn terminate(&mut self, exit_code: u32) -> WinResult {
         unsafe {
             let ret = TerminateThread(self.handle.as_raw_handle() as winnt::HANDLE, exit_code);
             if ret == 0 {

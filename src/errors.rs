@@ -63,4 +63,4 @@ impl From<io::Error> for Error {
     }
 }
 
-pub type WinResult<T> = Result<T, Error>;
+pub type WinResult<T = ()> = Result<T, Error>;

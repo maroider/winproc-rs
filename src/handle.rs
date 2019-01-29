@@ -25,7 +25,7 @@ impl Handle {
         Handle(handle)
     }
 
-    //    pub fn close(self) -> WinResult<()> {
+    //    pub fn close(self) -> WinResult {
     //        match unsafe { wh::CloseHandle(self.into_raw_handle()) } {
     //            0 => Err(Error::last()),
     //            _ => Ok(()),

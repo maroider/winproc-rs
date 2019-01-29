@@ -224,7 +224,7 @@ impl Process {
     /// Sets the priority class of the process.
     ///
     /// The handle must have the `PROCESS_SET_INFORMATION` access right.
-    pub fn set_priority(&mut self, priority: PriorityClass) -> WinResult<()> {
+    pub fn set_priority(&mut self, priority: PriorityClass) -> WinResult {
         unsafe {
             let ret = SetPriorityClass(
                 self.handle.as_raw_handle() as winnt::HANDLE,
@@ -249,7 +249,7 @@ impl Process {
     /// The function fails if the process is already in background processing mode.
     ///
     /// The handle must have the `PROCESS_SET_INFORMATION` access right.
-    pub fn start_background_mode(&mut self) -> WinResult<()> {
+    pub fn start_background_mode(&mut self) -> WinResult {
         unsafe {
             let ret = SetPriorityClass(
                 self.handle.as_raw_handle() as winnt::HANDLE,
@@ -273,7 +273,7 @@ impl Process {
     /// The function fails if the process is not in background processing mode.
     ///
     /// The handle must have the `PROCESS_SET_INFORMATION` access right.
-    pub fn end_background_mode(&mut self) -> WinResult<()> {
+    pub fn end_background_mode(&mut self) -> WinResult {
         unsafe {
             let ret = SetPriorityClass(
                 self.handle.as_raw_handle() as winnt::HANDLE,
@@ -290,7 +290,7 @@ impl Process {
     /// Terminates the process.
     ///
     /// The handle must have the `PROCESS_TERMINATE` access right.
-    pub fn terminate(&mut self, exit_code: u32) -> WinResult<()> {
+    pub fn terminate(&mut self, exit_code: u32) -> WinResult {
         unsafe {
             let ret = TerminateProcess(self.handle.as_raw_handle() as winnt::HANDLE, exit_code);
             if ret == 0 {
@@ -330,7 +330,7 @@ impl Process {
     ///
     /// If the new process affinity mask does not specify the processor that is currently running
     /// the process, the process is rescheduled on one of the allowable processors.
-    pub fn set_affinity_mask(&mut self, mask: u32) -> WinResult<()> {
+    pub fn set_affinity_mask(&mut self, mask: u32) -> WinResult {
         unsafe {
             let ret = SetProcessAffinityMask(self.handle.as_raw_handle() as winnt::HANDLE, mask);
             if ret == 0 {
@@ -344,7 +344,7 @@ impl Process {
     //    /// Sets the affinity of the process to the single specified processor.
     //    ///
     //    /// If the processor index equals or exceeds the width of [`DWORD`], the mask is not changed.
-    //    pub fn set_affinity(&mut self, processor: u8) -> WinResult<()> {
+    //    pub fn set_affinity(&mut self, processor: u8) -> WinResult {
     //        if (processor as usize) < mem::size_of::<u32>() * 8 {
     //            self.set_affinity_mask(1 << processor as u32)
     //        } else {
