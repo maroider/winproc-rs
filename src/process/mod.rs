@@ -449,7 +449,7 @@ impl Process {
     /// Returns an iterator over the modules of the process.
     pub fn module_entries<'a>(&'a self) -> WinResult<impl Iterator<Item = ModuleEntry> + 'a> {
         unsafe {
-            let snap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, 0);
+            let snap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, self.id());
             if snap == INVALID_HANDLE_VALUE {
                 Err(Error::last_os_error())
             } else {
