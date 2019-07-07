@@ -1,3 +1,4 @@
+use crate::{Error, Handle, Process, WinResult};
 use std::{
     mem,
     ops::Deref,
@@ -38,10 +39,6 @@ use winapi::{
         winnt::{self, PROCESSOR_NUMBER, THREAD_ALL_ACCESS},
     },
 };
-use Error;
-use Handle;
-use Process;
-use WinResult;
 
 /// A handle to a running thread.
 #[derive(Debug)]

@@ -1,3 +1,4 @@
+use crate::{Error, Handle, Process, WinResult};
 use std::{
     ffi::{CString, OsString},
     mem,
@@ -14,10 +15,6 @@ use winapi::{
         winnt::{self, WCHAR},
     },
 };
-use Error;
-use Handle;
-use Process;
-use WinResult;
 
 /// A handle to a process's loaded module.
 #[derive(Debug)]

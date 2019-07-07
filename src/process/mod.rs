@@ -6,6 +6,8 @@ pub use self::{
     module::{Module, ModuleEntry, ModuleInfo},
     thread::{PriorityLevel, Thread},
 };
+use crate::{Error, Handle, WinResult};
+use bitflags::bitflags;
 use std::{
     ffi::{OsStr, OsString},
     mem,
@@ -60,9 +62,6 @@ use winapi::{
         winnt::{self, PROCESS_ALL_ACCESS, WCHAR},
     },
 };
-use Error;
-use Handle;
-use WinResult;
 
 mod module;
 mod thread;

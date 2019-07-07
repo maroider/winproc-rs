@@ -2,6 +2,7 @@
 name = "winproc"
 version = "0.6.3"
 authors = ["Sam Green <sam.green81@gmail.com>"]
+edition = "2018"
 description = "Small wrapper over some process-related Windows APIs."
 readme = "README.md"
 license = "MIT"

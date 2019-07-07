@@ -1,3 +1,4 @@
+use failure::Fail;
 use std::{ffi, fmt, io};
 
 /// A Windows process error.

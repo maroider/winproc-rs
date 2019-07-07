@@ -1,17 +1,14 @@
+use crate::{Error, WinResult};
 use std::{
     io,
     ops::Deref,
     os::windows::io::{AsRawHandle, FromRawHandle, IntoRawHandle, RawHandle},
     ptr::null_mut,
 };
-
 use winapi::{
     shared::minwindef as mw,
     um::{handleapi as wh, processthreadsapi as wp, winnt},
 };
-
-use Error;
-use WinResult;
 
 /// An owning wrapper over a Windows handle.
 ///

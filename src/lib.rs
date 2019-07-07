@@ -2,19 +2,25 @@
 
 #![cfg(windows)]
 
-#[macro_use]
-extern crate bitflags;
-extern crate winapi;
-#[macro_use]
-extern crate failure;
-extern crate widestring;
-
 pub mod errors;
 mod handle;
 mod process;
 
+pub use self::{
+    errors::{Error, WinResult},
+    handle::Handle,
+    process::{
+        Access,
+        Module,
+        ModuleEntry,
+        ModuleInfo,
+        PriorityClass,
+        PriorityLevel,
+        Process,
+        Thread,
+    },
+};
 use std::mem;
-
 use winapi::{
     ctypes::c_void,
     shared::minwindef::WORD,
@@ -37,21 +43,6 @@ use winapi::{
             PROCESSOR_ARCHITECTURE_PPC,
             PROCESSOR_ARCHITECTURE_SHX,
         },
-    },
-};
-
-pub use self::{
-    errors::{Error, WinResult},
-    handle::Handle,
-    process::{
-        Access,
-        Module,
-        ModuleEntry,
-        ModuleInfo,
-        PriorityClass,
-        PriorityLevel,
-        Process,
-        Thread,
     },
 };
 
