@@ -1,6 +1,7 @@
 use crate::{Error, WinResult};
 use std::{
     io,
+    mem,
     ops::Deref,
     os::windows::io::{AsRawHandle, FromRawHandle, IntoRawHandle, RawHandle},
     ptr::null_mut,
@@ -76,6 +77,8 @@ impl FromRawHandle for Handle {
 
 impl IntoRawHandle for Handle {
     fn into_raw_handle(self) -> RawHandle {
-        self.0 as RawHandle
+        let handle = self.0 as RawHandle;
+        mem::forget(self);
+        handle
     }
 }
