@@ -70,6 +70,7 @@ mod thread;
 #[derive(Debug)]
 pub struct Process {
     handle: Handle,
+    parent_id: Option<u32>,
 }
 
 impl Process {
@@ -82,13 +83,18 @@ impl Process {
             } else {
                 Ok(Process {
                     handle: Handle::new(handle),
+                    parent_id: None,
                 })
             }
         }
     }
 
     /// Creates a process handle from a PID. Requests the specified access permissions.
-    pub fn from_id_with_access(id: u32, access: Access) -> WinResult<Process> {
+    pub fn from_id_with_access(
+        id: u32,
+        parent_id: Option<u32>,
+        access: Access,
+    ) -> WinResult<Process> {
         unsafe {
             let handle = OpenProcess(access.bits, 0, id);
             if handle.is_null() {
@@ -96,6 +102,7 @@ impl Process {
             } else {
                 Ok(Process {
                     handle: Handle::new(handle),
+                    parent_id,
                 })
             }
         }
@@ -117,7 +124,10 @@ impl Process {
 
     /// Creates a process handle from a handle.
     pub fn from_handle(handle: Handle) -> Process {
-        Process { handle }
+        Process {
+            handle,
+            parent_id: None,
+        }
     }
 
     /// Returns a handle to the current process.
@@ -165,6 +175,14 @@ impl Process {
     /// Returns the process's id.
     pub fn id(&self) -> u32 {
         unsafe { GetProcessId(self.handle.as_raw_handle() as winnt::HANDLE) }
+    }
+
+    /// Returns the id of the parent process.
+    ///
+    /// To use this method, you have to have this truct be instantiated by either `Process::all(..)` or
+    /// `Process::all_with_access(..)`.
+    pub fn parent_id(&self) -> Option<u32> {
+        self.parent_id
     }
 
     /// Returns true if the process is running.
@@ -479,6 +497,7 @@ impl FromRawHandle for Process {
     unsafe fn from_raw_handle(handle: RawHandle) -> Process {
         Process {
             handle: Handle::new(handle as winnt::HANDLE),
+            parent_id: None,
         }
     }
 }
@@ -508,6 +527,7 @@ impl Iterator for ProcessIter {
             } else {
                 Some(Process::from_id_with_access(
                     entry.th32ProcessID,
+                    Some(entry.th32ParentProcessID),
                     self.access,
                 ))
             }
